@@ -24,7 +24,6 @@ export default function POSTerminal() {
   const [paymentMethod, setPaymentMethod] = useState(null);
   const [cashTendered, setCashTendered] = useState('');
   const [digitalRef, setDigitalRef] = useState('');
-  const [activeTab, setActiveTab] = useState('tables');
   const [currentOrderId, setCurrentOrderId] = useState(null);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [razorpayLoading, setRazorpayLoading] = useState(false);
@@ -302,16 +301,10 @@ export default function POSTerminal() {
       <div className="pos-top-bar">
         <div className="pos-top-bar-actions">
           <button
-            className={`pill-btn ${activeTab === 'tables' ? 'active' : ''}`}
-            onClick={() => { setActiveTab('tables'); if (view !== VIEWS.CONFIRMATION) goBackToTables(); }}
+            className="pill-btn active"
+            onClick={() => { if (view !== VIEWS.CONFIRMATION) goBackToTables(); }}
           >
             Table View
-          </button>
-          <button
-            className={`pill-btn ${activeTab === 'register' ? 'active' : ''}`}
-            onClick={() => setActiveTab('register')}
-          >
-            Register
           </button>
         </div>
         <div className="pos-top-bar-right">

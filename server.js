@@ -42,7 +42,8 @@ const Order = mongoose.model('Order', OrderSchema);
 const SessionHistory = mongoose.model('SessionHistory', SessionHistorySchema);
 const Config = mongoose.model('Config', ConfigSchema);
 
-// Recursively remove MongoDB internal properties (_id, __v) from all levels
+// Recursively clean MongoDB internal properties from all levels
+// Maps _id back to id (Mongoose absorbs id → _id on insert) and strips __v
 function deepClean(obj) {
   if (Array.isArray(obj)) {
     return obj.map(item => deepClean(item));
@@ -50,7 +51,14 @@ function deepClean(obj) {
   if (obj !== null && typeof obj === 'object') {
     const cleaned = {};
     for (const key of Object.keys(obj)) {
-      if (key === '_id' || key === '__v') continue;
+      if (key === '__v') continue;
+      if (key === '_id') {
+        // Restore _id as id only for top-level docs that don't already have an id field
+        if (!('id' in obj)) {
+          cleaned['id'] = typeof obj._id === 'object' && obj._id.toString ? obj._id.toString() : obj._id;
+        }
+        continue;
+      }
       cleaned[key] = deepClean(obj[key]);
     }
     return cleaned;
