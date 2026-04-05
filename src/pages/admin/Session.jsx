@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Play, Clock, DollarSign, AlertTriangle } from 'lucide-react';
+import { Play, Clock, AlertTriangle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrency, formatDate, formatTime } from '../../data/seedData';
@@ -117,7 +117,6 @@ export default function Session() {
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1rem', background: 'var(--bg-cream)', borderRadius: 'var(--radius-md)' }}>
-                <DollarSign size={20} style={{ color: 'var(--success)' }} />
                 <div>
                   <div style={{ fontSize: '0.813rem', color: 'var(--text-muted)' }}>Closing Sale</div>
                   <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--success)' }}>
