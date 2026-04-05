@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Pencil, Trash2, Search, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, X, Upload, ImageIcon } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { generateId, formatCurrency, PRODUCT_CATEGORIES } from '../../data/seedData';
 import Modal from '../../components/shared/Modal';
@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 const emptyProduct = {
   name: '', category: 'Pizza', price: '', tax: 5, unit: 'pcs', emoji: '🍽️', description: '',
   variants: [],
+  image: '', // product image URL
 };
 
 export default function Products() {
@@ -18,6 +19,8 @@ export default function Products() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [form, setForm] = useState(emptyProduct);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
 
   const filtered = state.products.filter(p => {
     const matchCategory = activeCategory === 'All' || p.category === activeCategory;
@@ -33,8 +36,67 @@ export default function Products() {
 
   const openEditModal = (product) => {
     setEditingProduct(product);
-    setForm({ ...product });
+    setForm({ ...product, image: product.image || '' });
     setIsModalOpen(true);
+  };
+
+  // Upload image to local server
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    // Validate file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be less than 5MB');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setForm(prev => ({ ...prev, image: data.imageUrl }));
+        toast.success('Image uploaded!');
+      } else {
+        toast.error(data.message || 'Upload failed');
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      toast.error('Could not upload image');
+    } finally {
+      setUploading(false);
+      // Reset file input so the same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  // Remove uploaded image
+  const handleRemoveImage = async () => {
+    if (!form.image) return;
+
+    // Extract filename from URL path
+    const filename = form.image.split('/').pop();
+    try {
+      await fetch(`/api/upload/${filename}`, { method: 'DELETE' });
+    } catch {
+      // Ignore delete errors — just remove from form
+    }
+    setForm(prev => ({ ...prev, image: '' }));
+    toast.success('Image removed');
   };
 
   const handleSave = () => {
@@ -92,6 +154,12 @@ export default function Products() {
 
   const handleDelete = (id) => {
     if (window.confirm('Delete this product?')) {
+      // Also delete the image file if present
+      const product = state.products.find(p => p.id === id);
+      if (product?.image) {
+        const filename = product.image.split('/').pop();
+        fetch(`/api/upload/${filename}`, { method: 'DELETE' }).catch(() => {});
+      }
       dispatch({ type: 'DELETE_PRODUCT', payload: id });
       toast.success('Product deleted');
     }
@@ -204,8 +272,28 @@ export default function Products() {
               transition={{ delay: i * 0.03 }}
               style={{ cursor: 'default' }}
             >
-              <div style={{ textAlign: 'center', padding: '1rem 0 0.5rem', background: 'var(--bg-cream-dark)', margin: '-1.5rem -1.5rem 1rem', borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0' }}>
-                <span style={{ fontSize: '3rem' }}>{product.emoji}</span>
+              <div style={{
+                textAlign: 'center',
+                padding: product.image ? '0' : '1rem 0 0.5rem',
+                background: 'var(--bg-cream-dark)',
+                margin: '-1.5rem -1.5rem 1rem',
+                borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0',
+                overflow: 'hidden',
+              }}>
+                {product.image ? (
+                  <img
+                    src={product.image}
+                    alt={product.name}
+                    style={{
+                      width: '100%',
+                      height: '160px',
+                      objectFit: 'cover',
+                      display: 'block',
+                    }}
+                  />
+                ) : (
+                  <span style={{ fontSize: '3rem' }}>{product.emoji}</span>
+                )}
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
@@ -270,12 +358,113 @@ export default function Products() {
         footer={
           <>
             <button className="btn btn-ghost" onClick={() => setIsModalOpen(false)}>Cancel</button>
-            <button className="btn btn-primary" onClick={handleSave}>
+            <button className="btn btn-primary" onClick={handleSave} disabled={uploading}>
               {editingProduct ? 'Update' : 'Add'} Product
             </button>
           </>
         }
       >
+        {/* Product Image Upload */}
+        <div className="form-group">
+          <label className="form-label">Product Image</label>
+          <div style={{
+            display: 'flex',
+            gap: '1rem',
+            alignItems: 'flex-start',
+          }}>
+            {/* Image Preview */}
+            <div style={{
+              width: '120px',
+              height: '90px',
+              borderRadius: 'var(--radius-md)',
+              border: '2px dashed var(--border)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
+              background: form.image ? 'transparent' : 'var(--bg-cream)',
+              flexShrink: 0,
+              position: 'relative',
+            }}>
+              {form.image ? (
+                <img
+                  src={form.image}
+                  alt="Preview"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                  }}
+                />
+              ) : (
+                <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <ImageIcon size={24} />
+                  <div style={{ fontSize: '0.625rem', marginTop: '0.25rem' }}>No image</div>
+                </div>
+              )}
+            </div>
+
+            {/* Upload Controls */}
+            <div style={{ flex: 1 }}>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
+                onChange={handleImageUpload}
+                style={{ display: 'none' }}
+                id="product-image-upload"
+              />
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  style={{
+                    border: '1px solid var(--border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.375rem',
+                  }}
+                >
+                  {uploading ? (
+                    <>
+                      <span className="spinner-sm" style={{
+                        width: 14,
+                        height: 14,
+                        border: '2px solid var(--border)',
+                        borderTopColor: 'var(--primary)',
+                        borderRadius: '50%',
+                        animation: 'spin 0.6s linear infinite',
+                        display: 'inline-block',
+                      }} />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={14} />
+                      {form.image ? 'Change' : 'Upload'}
+                    </>
+                  )}
+                </button>
+                {form.image && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={handleRemoveImage}
+                    style={{ color: 'var(--danger)', border: '1px solid var(--danger-bg, #fef2f2)' }}
+                  >
+                    <X size={14} /> Remove
+                  </button>
+                )}
+              </div>
+              <p style={{ fontSize: '0.688rem', color: 'var(--text-muted)', marginTop: '0.375rem', margin: '0.375rem 0 0' }}>
+                JPG, PNG, GIF, WebP • Max 5MB
+              </p>
+            </div>
+          </div>
+        </div>
+
         <div className="form-group">
           <label className="form-label">Product Name</label>
           <input className="form-input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g., Margherita Pizza" />
@@ -308,7 +497,7 @@ export default function Products() {
         </div>
 
         <div className="form-group">
-          <label className="form-label">Icon</label>
+          <label className="form-label">Fallback Icon {form.image ? <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 400 }}>(shown when no image)</span> : ''}</label>
           <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap' }}>
             {emojiOptions.map(e => (
               <button

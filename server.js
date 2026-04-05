@@ -4,6 +4,10 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 
 dotenv.config();
 
@@ -12,6 +16,37 @@ const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+
+// ─── Local Image Storage Setup ───
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+// Serve uploaded images as static files
+app.use('/uploads', express.static(UPLOADS_DIR));
+
+// Multer config — store images locally with unique filenames
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOADS_DIR),
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, 'product-' + uniqueSuffix + ext);
+  },
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB max
+  fileFilter: (req, file, cb) => {
+    const allowed = /jpeg|jpg|png|gif|webp|svg/;
+    const extOk = allowed.test(path.extname(file.originalname).toLowerCase());
+    const mimeOk = allowed.test(file.mimetype.split('/')[1]);
+    if (extOk || mimeOk) return cb(null, true);
+    cb(new Error('Only image files are allowed'));
+  },
+});
 
 // Razorpay instance
 const razorpay = new Razorpay({
@@ -231,6 +266,36 @@ app.post('/api/razorpay/verify', (req, res) => {
     }
   } catch (error) {
     console.error('Razorpay verification error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ─── Product Image Upload Endpoints (Local Storage) ───
+
+// Upload a product image
+app.post('/api/upload', upload.single('image'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No image file provided' });
+    }
+    const imageUrl = '/uploads/' + req.file.filename;
+    res.json({ success: true, imageUrl, filename: req.file.filename });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete a product image
+app.delete('/api/upload/:filename', (req, res) => {
+  try {
+    const filePath = path.join(UPLOADS_DIR, req.params.filename);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      res.json({ success: true, message: 'Image deleted' });
+    } else {
+      res.json({ success: true, message: 'File already removed' });
+    }
+  } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });

@@ -427,7 +427,13 @@ export default function POSTerminal() {
                         whileTap={!isUnavailable ? { scale: 0.97 } : {}}
                         onClick={() => !isUnavailable && addToCart(product)}
                       >
-                        <div className="pos-product-emoji">{product.emoji}</div>
+                        {product.image ? (
+                          <div className="pos-product-img-wrap">
+                            <img src={product.image} alt={product.name} className="pos-product-img" />
+                          </div>
+                        ) : (
+                          <div className="pos-product-emoji">{product.emoji}</div>
+                        )}
                         <div className="pos-product-name">{product.name}</div>
                         <div className="pos-product-price">{formatCurrency(product.price)}</div>
                         {isUnavailable && (
